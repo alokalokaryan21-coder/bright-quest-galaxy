@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { runInNewContext } from 'node:vm';
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, description) {
@@ -217,48 +218,129 @@ try {
   assert.ok(await run(() => document.querySelectorAll('.letter-tile').length >= 3));
   await call('Page.removeScriptToEvaluateOnNewDocument', blockedStorage);
 
+  function solveMaths(type, prompt) {
+    const [a, b, c, d, e] = prompt.match(/\d+/g).map(Number);
+    switch (type) {
+      case 'Addition': return a + b;
+      case 'Subtraction': return a - b;
+      case 'Missing number': return b - a;
+      case 'Multiplication':
+      case 'Equal groups': return a * b;
+      case 'Groups plus extras': return a * b + c;
+      case 'Division': return a / b;
+      case 'Two-step arithmetic': return a + b - c;
+      case 'Missing factor': return (c - b) / a;
+      case 'Square numbers': return a * a - b;
+      case 'Number patterns': return d + (d - c) + ((d - c) - (c - b));
+      case 'Order of operations': return a + b * (c + d);
+      case 'Reverse the mission': return (d / c - b) / a;
+      case 'Compare two plans': return Math.abs(a * b + c - d * e);
+      default: throw new Error('Unknown puzzle type: ' + type);
+    }
+  }
+
+  const typesByLevel = [
+    ['Addition', 'Subtraction', 'Missing number', 'Addition', 'Missing number'],
+    ['Addition', 'Subtraction', 'Multiplication', 'Equal groups', 'Groups plus extras'],
+    ['Division', 'Two-step arithmetic', 'Two-step arithmetic', 'Missing factor', 'Missing factor'],
+    ['Square numbers', 'Number patterns', 'Order of operations', 'Reverse the mission', 'Compare two plans']
+  ];
+  const source = await readFile('assets/maths-questions.js', 'utf8');
+  const generator = runInNewContext(source + '\nmathsQuestions');
+  for (let level = 0; level < typesByLevel.length; level++) {
+    for (let slot = 0; slot < 5; slot++) {
+      const prompts = new Set();
+      for (let sample = 0; sample < 60; sample++) {
+        const question = generator.create(level, slot);
+        prompts.add(question.prompt);
+        assert.equal(question.type, typesByLevel[level][slot]);
+        assert.equal(question.answer, solveMaths(question.type, question.prompt));
+        assert.equal(new Set(question.choices).size, 4);
+        assert.ok(question.choices.includes(question.answer));
+        assert.ok(question.choices.every(value => Number.isInteger(value) && value >= 0));
+        assert.ok(question.hint.length > 0 && !question.hint.includes(String(question.answer)));
+        assert.ok(question.explanation.includes(String(question.answer)));
+      }
+      assert.ok(prompts.size > 5, 'Each mission slot should generate varied puzzles');
+    }
+  }
+
   await go('/maths/');
+  assert.equal(await run(() => getComputedStyle(document.querySelector('.maths-layout')).gridTemplateColumns.split(' ').length), 2);
+  const initialQuestion = await run(() => document.querySelector('#sum').textContent);
+  await run(() => document.querySelector('#hint').click());
+  assert.ok(await run(() => document.activeElement.id === 'puzzle-hint' && !document.activeElement.hidden && document.activeElement.textContent.length > 0));
+  await until(async () => await run(() => document.querySelector('#mission-timer').textContent !== '0:00'), 'running timer');
+  await run(() => document.querySelector('#different-puzzle').click());
+  assert.notEqual(await run(() => document.querySelector('#sum').textContent), initialQuestion);
+  assert.match(await run(() => document.querySelector('#stats').textContent), /^Puzzle 1 of 5$/);
+  assert.ok(await run(() => document.querySelector('#fuel').value === 0 && document.querySelector('#mission-timer').textContent !== '0:00'));
+
+  // Changing level or restarting after an answer must never advance the new mission.
   for (const selector of ['#restart', '[data-level="1"]']) {
     await run(selector => {
       document.querySelector('#answers button').click();
       document.querySelector(selector).click();
     }, selector);
     await wait(1150);
-    assert.match(await run(() => document.querySelector('#stats').textContent), /^Question 1 of 5 · 0/);
+    assert.match(await run(() => document.querySelector('#stats').textContent), /^Puzzle 1 of 5$/);
+    assert.equal(await run(() => document.querySelector('#fuel').value), 0);
   }
 
   await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await call('Emulation.setDeviceMetricsOverride', { width: 320, height: 650, deviceScaleFactor: 1, mobile: true });
   await run(() => document.querySelector('[data-level="0"]').click());
   for (let level = 0; level < 4; level++) {
-    const seen = new Set();
     const questions = new Set();
-    for (let round = 0; round < 5; round++) {
-      const { problem, operation } = await run(wrong => {
-        const problem = document.querySelector('#sum').textContent;
-        const [a, operation, b] = problem.split(' ');
-        const result = operation === '+' ? +a + +b : operation === '−' ? a - b : a * b;
-        [...document.querySelectorAll('#answers button')].find(button => wrong ? +button.textContent !== result : +button.textContent === result).click();
-        return { problem, operation };
-      }, round === 0);
+    assert.equal(await run(() => Number(document.querySelector('[data-level][aria-pressed="true"]').dataset.level)), level);
+    for (let slot = 0; slot < 5; slot++) {
+      const { problem, type } = await run(() => ({
+        problem: document.querySelector('#sum').textContent,
+        type: document.querySelector('#puzzle-type').textContent
+      }));
+      assert.equal(type, typesByLevel[level][slot]);
       assert.ok(!questions.has(problem));
       questions.add(problem);
-      seen.add(operation);
-      await until(async () => run(() => document.querySelector('#celebration').open ||
-        Boolean(document.querySelector('#answers button:enabled'))), 'maths answer feedback');
+      assert.ok(await run(() => document.documentElement.scrollWidth <= innerWidth));
+      await run((answer, wrong) => {
+        const button = [...document.querySelectorAll('#answers button')].find(button =>
+          wrong ? +button.textContent !== answer : +button.textContent === answer);
+        if (!button) throw Error('Expected answer option');
+        button.click();
+      }, solveMaths(type, problem), slot === 0);
+      assert.equal(await run(() => document.querySelector('#fuel').value), slot + 1);
+      if (slot < 4) {
+        assert.equal(await run(() => document.activeElement.id), 'continue-puzzle');
+        if (slot === 0) {
+          await call('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+          await call('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        } else {
+          await run(() => document.querySelector('#continue-puzzle').click());
+        }
+      }
     }
-    assert.deepEqual([...seen].sort(), level === 3 ? ['+', '×', '−'] : [['+'], ['−'], ['×']][level]);
     assert.deepEqual(await run(() => ({
       score: document.querySelector('#completion-score').textContent,
-      time: /^Completion time: \d+:\d{2}$/.test(document.querySelector('#completion-time').textContent),
+      time: document.querySelector('#completion-time').textContent === 'Completion time: ' + document.querySelector('#mission-timer').textContent,
       champion: document.querySelector('#celebration-title').textContent.includes('Maths Champion'),
       nextHidden: document.querySelector('#next-level').hidden,
-      modal: document.querySelector('#celebration').matches(':modal')
-    })), { score: 'Score: 4 out of 5', time: true, champion: level === 3, nextHidden: level === 3, modal: true });
+      modal: document.querySelector('#celebration').matches(':modal'),
+      focused: document.activeElement.id,
+      fits: document.querySelector('#celebration').scrollWidth <= innerWidth
+    })), { score: 'Score: 4 out of 5', time: true, champion: level === 3, nextHidden: level === 3, modal: true, focused: 'celebration-title', fits: true });
+    if (level === 0) {
+      const finalTime = await run(() => document.querySelector('#mission-timer').textContent);
+      await wait(1100);
+      assert.equal(await run(() => document.querySelector('#mission-timer').textContent), finalTime);
+      await run(() => document.querySelector('#celebration').dispatchEvent(new Event('cancel', { cancelable: true })));
+      assert.equal(await run(() => document.activeElement.id), 'continue-puzzle');
+      await run(() => document.querySelector('#continue-puzzle').click());
+    }
     await run(level => document.querySelector(level === 3 ? '#try-again' : '#next-level').click(), level);
-    assert.match(await run(() => document.querySelector('#stats').textContent), /^Question 1 of 5/);
+    assert.match(await run(() => document.querySelector('#stats').textContent), /^Puzzle 1 of 5$/);
+    assert.equal(await run(() => document.querySelector('#mission-timer').textContent), '0:00');
   }
 
-  await call('Emulation.setDeviceMetricsOverride', { width: 320, height: 650, deviceScaleFactor: 1, mobile: true });
   await go('/memory/');
   const order = () => [...document.querySelectorAll('.memory-card')].map(card => card.dataset.symbol).join('|');
   const firstOrder = await run(order);
@@ -324,7 +406,7 @@ try {
   }
   assert.match(await run(() => document.querySelector('#stats').textContent), /^Moves: 0 · Maze 4 of 4/);
   assert.deepEqual(exceptions, []);
-  console.log('Passed Phase 1 privacy and timer regressions, Word Trails daily history and refresh, Maths celebrations, Memory progression, and all four Robot mazes.');
+  console.log('Passed Phase 1 privacy and timer regressions, Word Trails daily history and refresh, Maths puzzle correctness, controls and celebrations, Memory progression, and all four Robot mazes.');
 } finally {
   socket?.close();
   for (const process of [browser, server]) {
@@ -333,5 +415,5 @@ try {
       await once(process, 'exit');
     }
   }
-  await rm(profile, { recursive: true, force: true });
+  await rm(profile, { recursive: true, force: true, maxRetries: 5 });
 }

@@ -1,0 +1,124 @@
+.maths-page {
+  --mission-navy: #152e55;
+  --mission-blue: #dbeefa;
+  --mission-lavender: #ede6fb;
+  --mission-yellow: #fff0bc;
+  padding: clamp(34px, 6vw, 72px) 0 36px;
+  background: #fff8ea;
+  color: var(--mission-navy);
+}
+
+.maths-intro { margin-bottom: 26px; }
+.maths-intro h1 {
+  margin: 3px 0 8px;
+  font-size: clamp(2.45rem, 7vw, 4.75rem);
+  line-height: 1.04;
+  color: var(--mission-navy);
+}
+.maths-intro p { margin: 0; font-size: 1.13rem; }
+.maths-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(245px, 1fr);
+  align-items: start;
+  gap: clamp(14px, 3vw, 26px);
+}
+.maths-mission, .flight-controls {
+  border-radius: 24px;
+  padding: clamp(15px, 3vw, 28px);
+  border: 1px solid #b7d2e9;
+}
+.maths-mission { background: var(--mission-blue); }
+.flight-controls {
+  background: var(--mission-lavender);
+  border-color: #cec2e7;
+}
+.mission-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-bottom: 22px;
+}
+.mission-header :is(h2, p), .flight-header h2 { margin: 0; }
+.mission-header h2, .flight-header h2 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
+.mission-header p { font-size: .95rem; font-weight: 700; }
+#fuel {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 17px;
+  border: 0;
+  border-radius: 30px;
+  overflow: hidden;
+  background: #b4cee7;
+  accent-color: #245db1;
+}
+#fuel::-webkit-progress-bar { background: #b4cee7; }
+#fuel::-webkit-progress-value { background: #245db1; }
+#fuel::-moz-progress-bar { background: #245db1; }
+.mission-puzzle {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 3vw, 20px);
+  min-height: 128px;
+  padding: clamp(13px, 3vw, 22px);
+  background: var(--mission-yellow);
+  border: 1px solid #dab65f;
+  border-radius: 18px;
+}
+.mission-asteroid { font-size: clamp(1.65rem, 5vw, 3rem); }
+.mission-puzzle > div { min-width: 0; }
+#puzzle-type { margin: 0 0 4px; font-weight: 750; color: #574322; }
+#sum {
+  margin: 0;
+  font-size: clamp(1.25rem, 3.5vw, 2rem);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.maths-mission .answers { max-width: none; margin: 18px 0 12px; gap: 9px; }
+.maths-mission .answer { min-height: 48px; color: var(--mission-navy); }
+.maths-mission .answer.correct { background: #d5f3df; color: #164c31; }
+.maths-mission .answer.wrong { background: #fce1dd; color: #762627; }
+.mission-feedback, .mission-hint {
+  padding: 10px 13px;
+  border-radius: 12px;
+  line-height: 1.5;
+}
+.mission-feedback { background: #f2f8ff; margin: 0; }
+.mission-hint { background: #fff5d4; margin: 10px 0 0; }
+#continue-puzzle { margin-top: 13px; }
+.flight-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+.flight-timer {
+  background: #fff;
+  border-radius: 14px;
+  padding: 7px 10px;
+  font-size: .93rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.flight-levels, .flight-actions { display: grid; gap: 8px; }
+.flight-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.flight-levels .level, .flight-actions .btn { min-height: 44px; }
+.flight-levels .level { padding-inline: 6px; }
+.flight-levels .level.is-active, .mission-primary { background: #203e73; color: white; }
+.mission-primary:hover { background: #152e55; color: white; }
+.flight-actions .btn-outline, .maths-return .btn { background: #fffdf8; }
+#level-description { line-height: 1.45; }
+.maths-return { display: flex; justify-content: center; margin-top: 26px; }
+.celebration-content .final-feedback { max-width: 46ch; margin: 12px auto 22px; font-size: 1rem; }
+.maths-page :focus-visible, .math-celebration :focus-visible {
+  outline: 3px solid #895400;
+  outline-offset: 3px;
+}
+.math-celebration :focus-visible { outline-color: #ffe36d; }
+@media (max-width: 690px) {
+  .maths-layout { grid-template-columns: minmax(0, 1fr); }
+  .flight-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #restart { grid-column: 1 / -1; }
+}

@@ -8,15 +8,69 @@
       <title>Asteroid Maths | Moonberry Play Lab</title>
       <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
       <link rel="stylesheet" href="/assets/styles.css">
+      <link rel="stylesheet" href="/assets/maths.css">
     </head>
     <body><a class="skip" href="#main">Skip to content</a>
     <header class="site-header"><div class="shell nav"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✦</span>Moonberry Play Lab</a><nav class="nav-links" id="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/#games" aria-current="page">Games</a><a href="/parents/">For Parents</a><a href="/about/">About</a></nav><div class="nav-actions"><a class="btn btn-small btn-outline" href="/parents/">🎁 Birthday magic</a><button type="button" class="menu-toggle" aria-controls="main-nav" aria-expanded="false">Menu ☰</button></div></div></header>
-    <main id="main"><div class="shell"><div class="interior-hero"><span class="eyebrow">Number mission</span><h1>Asteroid Maths</h1><p>Choose the answer to each friendly maths challenge and rocket through five questions.</p></div><div class="play-panel"><div class="game-topbar"><span class="scorepill" id="stats" aria-live="polite">Question 1 of 5</span><div class="levels" role="group" aria-label="Choose a maths level"><button type="button" class="level is-active" data-level="0" aria-pressed="true" aria-label="Starter, addition">Starter</button><button type="button" class="level" data-level="1" aria-pressed="false" aria-label="Explorer, subtraction">Explorer</button><button type="button" class="level" data-level="2" aria-pressed="false" aria-label="Challenger, multiplication">Challenger</button><button type="button" class="level" data-level="3" aria-pressed="false" aria-label="Master, mixed operations">Master</button></div></div><div class="math-question"><span class="eyebrow">Solve this puzzle</span><div class="sum" id="sum" tabindex="-1">?</div></div><div id="answers" class="answers" aria-label="Choose an answer"></div><p class="status" id="game-status" role="status" aria-live="polite">Choose the correct answer.</p><div class="game-actions"><button id="restart" type="button" class="btn btn-primary">↻ New round</button></div></div><div class="rule">Games work without an account. Ask a grown-up before sharing anything online.</div><div style="text-align:center;margin:22px"><a class="btn btn-outline" href="/#games">← All games</a></div></div></main>
+    <main id="main" class="maths-page">
+      <div class="shell">
+        <header class="maths-intro">
+          <span class="eyebrow">Number mission</span>
+          <h1>Asteroid Maths</h1>
+          <p>Solve five puzzles to fuel your spaceship.</p>
+        </header>
+
+        <div class="maths-layout">
+          <section class="maths-mission" aria-labelledby="mission-title">
+            <header class="mission-header">
+              <h2 id="mission-title">Spaceship fuel</h2>
+              <p id="stats" aria-live="polite">Puzzle 1 of 5</p>
+              <progress id="fuel" max="5" value="0" aria-labelledby="mission-title"></progress>
+            </header>
+
+            <div class="mission-puzzle">
+              <span class="mission-asteroid" aria-hidden="true">☄️</span>
+              <div>
+                <p id="puzzle-type"></p>
+                <h3 id="sum" tabindex="-1">Loading your first puzzle…</h3>
+              </div>
+            </div>
+
+            <div id="answers" class="answers" role="group" aria-label="Choose an answer"></div>
+            <p class="mission-feedback" id="game-status" role="status">Choose an answer to solve the puzzle.</p>
+            <p class="mission-hint" id="puzzle-hint" tabindex="-1" hidden></p>
+            <button id="continue-puzzle" class="btn mission-primary" type="button" hidden>Next puzzle →</button>
+          </section>
+
+          <aside class="flight-controls" aria-labelledby="flight-title">
+            <div class="flight-header">
+              <h2 id="flight-title">Flight controls</h2>
+              <span class="flight-timer">Time <span id="mission-timer">0:00</span></span>
+            </div>
+            <div class="flight-levels" role="group" aria-label="Choose a maths level">
+              <button type="button" class="level is-active" data-level="0" aria-pressed="true">Explorer</button>
+              <button type="button" class="level" data-level="1" aria-pressed="false">Challenger</button>
+              <button type="button" class="level" data-level="2" aria-pressed="false">Expert</button>
+              <button type="button" class="level" data-level="3" aria-pressed="false">Master</button>
+            </div>
+            <p id="level-description"></p>
+            <div class="flight-actions">
+              <button id="hint" class="btn btn-outline" type="button">Hint</button>
+              <button id="different-puzzle" class="btn btn-outline" type="button">Try a Different Puzzle</button>
+              <button id="restart" class="btn mission-primary" type="button">New Mission</button>
+            </div>
+          </aside>
+        </div>
+
+        <div class="maths-return"><a class="btn btn-outline" href="/#games">← All games</a></div>
+      </div>
+    </main>
     <dialog class="math-celebration" id="celebration" aria-labelledby="celebration-title">
       <div class="celebration-content">
         <h2 id="celebration-title" tabindex="-1" autofocus>Congratulations!</h2>
         <p id="completion-score"></p>
         <p id="completion-time"></p>
+        <p id="final-feedback" class="final-feedback"></p>
         <div class="game-actions">
           <button type="button" class="btn btn-white" id="try-again">Try Again</button>
           <button type="button" class="btn celebration-next" id="next-level">Next Level →</button>
@@ -25,5 +79,6 @@
     </dialog>
     <footer class="footer"><div class="shell"><div class="footer-main"><div><a class="brand" href="/"><span class="brand-mark">✦</span> Moonberry Play Lab</a><p>Little games. Bright minds. Big adventures.<br>Free, friendly learning games for curious explorers.</p></div><div><h4>Explore</h4><nav aria-label="Footer games"><a href="/memory/">Space Memory Match</a><a href="/maths/">Asteroid Maths</a><a href="/words/">Word Trails</a><a href="/robot/">Robot Rescue</a></nav></div><div><h4>Information</h4><nav aria-label="Footer information"><a href="/parents/">For Parents</a><a href="/about/">About</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></div></div><div class="footer-bottom"><span>© <span id="year"></span> Moonberry Play Lab</span><span>Made for learning, play and imagination ✨</span></div></div></footer>
     <script src="/assets/site.js" defer></script>
-    <script src="/assets/config.js" defer></script><script src="/assets/maths.js" defer></script>
+    <script src="/assets/maths-questions.js" defer></script>
+    <script src="/assets/maths.js" defer></script>
     </body></html>
