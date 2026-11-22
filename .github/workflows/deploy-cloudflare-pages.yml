@@ -1,0 +1,63 @@
+name: Deploy Bright Quest Galaxy to Cloudflare Pages
+
+# First release is manual. A future change can enable deployments on pushes to main.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bright-quest-galaxy-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy static website
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out approved source
+        uses: actions/checkout@v6
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in assets/*.js; do
+            node --check "$file"
+          done
+
+      - name: Assemble website files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp index.html robots.txt _headers dist/
+          for directory in 404 about assets maths memory parents privacy robot terms words; do
+            test -d "$directory" || { echo "::error::Missing $directory"; exit 1; }
+            cp -R "$directory" dist/
+          done
+          for file in index.html assets/styles.css assets/word-bank.js assets/words.js maths/index.html memory/index.html robot/index.html words/index.html parents/index.html; do
+            test -s "dist/$file" || { echo "::error::Missing $file"; exit 1; }
+          done
+          echo "Website files prepared; source ZIP and tests excluded."
+
+      - name: Check Cloudflare configuration
+        shell: bash
+        env:
+          CF_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CF_PROJECT" || { echo "::error::Set the repository variable CLOUDFLARE_PAGES_PROJECT to the existing Pages project name."; exit 1; }
+          test -n "$CF_TOKEN" || { echo "::error::Add the repository secret CLOUDFLARE_API_TOKEN."; exit 1; }
+          test -n "$CF_ACCOUNT_ID" || { echo "::error::Add the repository secret CLOUDFLARE_ACCOUNT_ID."; exit 1; }
+
+      - name: Deploy to existing Cloudflare Pages project
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=main
