@@ -3,3 +3,41 @@
 @media (max-width:920px){.games{grid-template-columns:repeat(2,1fr)}.hero-grid{gap:25px}.scene{min-height:355px}.scene .moon{height:160px;width:160px;right:55px}.scene .astronaut{font-size:90px}.parent-banner{grid-template-columns:1fr .45fr}.footer-main{grid-template-columns:1.4fr 1fr}}
 @media(max-width:700px){.shell{width:min(100% - 28px,1160px)}.nav{height:68px}.brand{font-size:1rem}.brand-mark{width:38px;height:38px}.nav-actions .btn{display:none}.menu-toggle{display:inline-flex}.nav-links{display:none;position:absolute;top:68px;left:0;right:0;background:#fff;box-shadow:0 15px 20px #2c255b17;padding:17px 22px;flex-direction:column;align-items:stretch;gap:7px}.nav-links.open{display:flex}.nav-links a{padding:9px}.hero{padding:43px 0 28px}.hero-grid{grid-template-columns:1fr}.hero h1{font-size:3.2rem}.scene{min-height:330px;order:-1}.scene .chip-bottom{left:25%}.hero-actions{margin-top:20px}.section{padding:49px 0}.games{gap:13px}.game-card{min-height:0}.game-art{height:114px;font-size:55px}.game-body{padding:16px}.game-body p{font-size:.84rem}.game-meta{font-size:.72rem}.value-strip{grid-template-columns:1fr;gap:5px}.value-strip div{text-align:left;display:grid;grid-template-columns:45px 1fr;column-gap:10px;padding:7px}.value-emoji{grid-row:span 2}.parent-banner{grid-template-columns:1fr;padding:30px 25px}.gift-scene{display:none}.footer-main{grid-template-columns:1fr 1fr}.footer-main>div:first-child{grid-column:span 2}.footer-bottom{flex-direction:column;gap:10px;text-align:center}.wide-grid,.steps{grid-template-columns:1fr}.interior-hero{padding:45px 0 28px}.play-panel{padding:16px;border-radius:20px}.memory-board{gap:7px}.memory-card{border-radius:11px}.levels{gap:6px}.level{font-size:.83rem;padding:8px}.text-content{padding:24px}.form-wrap{padding:21px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+/* Difficulty progression and round results */
+[hidden] { display: none !important; }
+.word-history select { max-width: 100%; font: inherit; }
+.memory-board[data-pairs="12"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 520px) {
+  .memory-board[data-pairs="12"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.math-celebration {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  color: white;
+  background: linear-gradient(145deg, #183b91, #4c2689 62%, #322266);
+  overflow: auto;
+}
+.math-celebration[open] { display: grid; place-items: center; }
+.celebration-content { text-align: center; }
+.celebration-content h2 {
+  margin: 0 0 18px;
+  color: #ffe36d;
+  font-size: clamp(2rem, 8vw, 5rem);
+  overflow-wrap: anywhere;
+}
+.celebration-content p { font-size: clamp(1.15rem, 4vw, 1.6rem); }
+.celebration-next { background: #ffe36d; color: #272050; }
+
+@media (max-width: 520px) {
+  .maze-grid[data-size="13"] { gap: 2px; }
+  .maze-grid[data-size="13"] .maze-cell { border-radius: 3px; }
+}
