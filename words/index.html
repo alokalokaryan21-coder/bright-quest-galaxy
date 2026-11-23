@@ -12,49 +12,10 @@
     </head>
     <body><a class="skip" href="#main">Skip to content</a>
     <header class="site-header"><div class="shell nav"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✦</span>Moonberry Play Lab</a><nav class="nav-links" id="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/#games" aria-current="page">Games</a><a href="/parents/">For Parents</a><a href="/about/">About</a></nav><div class="nav-actions"><a class="btn btn-small btn-outline" href="/parents/">🎁 Birthday magic</a><button type="button" class="menu-toggle" aria-controls="main-nav" aria-expanded="false">Menu ☰</button></div></div></header>
-    <main id="main" class="trails-page">
-      <div class="shell">
-        <header class="trails-intro">
-          <span class="eyebrow">Word mission</span>
-          <h1>Word Trails</h1>
-          <p>Use the clue to find a word. Connect letters up, down, left, or right.</p>
-        </header>
-        <div class="levels trails-levels" role="group" aria-label="Choose a word level">
-          <button type="button" class="level is-active" data-level="0" aria-pressed="true">Starter · 3–4 letters</button>
-          <button type="button" class="level" data-level="1" aria-pressed="false">Explorer · 4–5 letters</button>
-          <button type="button" class="level" data-level="2" aria-pressed="false">Challenger · 5–6 letters</button>
-          <button type="button" class="level" data-level="3" aria-pressed="false">Master · 6–8 letters</button>
-        </div>
-        <div class="trails-layout">
-          <section class="trails-board-panel" aria-labelledby="trail-board-title">
-            <div class="trails-heading">
-              <h2 id="trail-board-title">Letter trail</h2>
-              <span id="trail-timer" class="scorepill">0:00</span>
-            </div>
-            <div class="trail-clue"><strong id="clue">Choose a level and start a word</strong></div>
-            <div id="letter-bank" class="trail-board" role="group" aria-label="Letter grid" hidden></div>
-            <p id="trail-instructions">Tap a letter to start, then choose a neighbour. You can also use Tab and Enter.</p>
-            <button type="button" class="btn btn-outline" id="drag-mode" aria-pressed="false" hidden>Drag mode</button>
-          </section>
-          <section class="trails-controls" aria-labelledby="trail-control-title">
-            <h2 id="trail-control-title">Word to discover</h2>
-            <p class="scorepill" id="stats" aria-live="polite">5 new challenges left today</p>
-            <p class="word-history" hidden><label for="puzzle-history">Revisit a puzzle</label> <select id="puzzle-history"></select></p>
-            <div id="word-slots" class="word-slots" role="group" aria-label="Your answer"></div>
-            <p id="game-status" role="status">Each level has five new challenges per day.</p>
-            <div class="trail-actions">
-              <button class="btn btn-outline" id="undo" type="button" disabled>Undo</button>
-              <button class="btn btn-outline" id="hint" type="button" disabled>Hint</button>
-              <button class="btn btn-outline" id="restart" type="button" disabled>Clear path</button>
-              <button class="btn btn-primary" id="next" type="button" disabled>Next word →</button>
-              <button class="btn btn-primary" id="new-word" type="button">Start a word</button>
-            </div>
-          </section>
-        </div>
-        <div class="trails-return"><a class="btn btn-outline" href="/#games">← All games</a></div>
-      </div>
-    </main>
+    <main id="main" class="trails-page"><div class="trails-shell">
+<div class="heading"><div><p class="eyebrow">CONNECT • DISCOVER • CELEBRATE</p><h1>Word Trails</h1><p>Start on any letter and try different combinations, moving up, down, left or right. Find the hidden words in any order. Tap Hint to reveal one letter at a time. Play five puzzles each day: 3 words per puzzle on Easy, 4 on Medium and 5 on Hard.</p></div></div><div class="levelnav" role="group" aria-label="Difficulty"><button data-difficulty="0">Easy · Little explorer</button><button data-difficulty="1">Medium · Space traveller</button><button data-difficulty="2">Hard · Word wizard</button></div><div class="word-layout"><section class="word-board-panel"><div class="boardtitle"><h2 id="puzzle-title"></h2><div class="word-stats"><span id="word-progress"></span><span id="timer-badge" class="timer-badge">⏱ <span id="word-timer" role="timer" aria-label="Elapsed puzzle time" aria-live="off">00:00</span></span></div></div><div id="word-celebration" class="word-celebration" role="status" aria-live="polite" hidden><strong>🌟 Congratulations! You did it!</strong><span>All words found!</span><span class="finish-label">Your time <b id="word-finish-time"></b></span></div><div class="trail-tools"><button id="word-touch-mode" aria-pressed="false">Drag mode: off</button><button id="word-zoom" aria-pressed="false">Larger letters</button></div><p class="touch-help">On a phone, tap letters one at a time. Turn on Drag mode to trace with your finger.</p><div id="trail-scroll"><div id="trail-board"><svg id="trail-lines" aria-hidden="true"></svg><div id="letters" role="group" aria-label="Letter board"></div></div></div><p class="legend">Grey squares are blocked. Paths cannot cross or reuse letters. The timer starts with your first letter. No time limit.</p></section><section class="word-controls"><h2>Words to discover</h2><p id="daily-practice" class="legend"></p><button id="word-new" class="primary">New puzzle →</button><div id="word-list"></div><div class="spelling" id="spelling" aria-live="polite"></div><p id="word-message" role="status" aria-live="polite"></p><div class="actions"><button id="word-undo">↶ Undo</button><button id="word-hint">💡 Hint</button><button id="word-clear">Clear path</button></div><button id="word-restart">Restart puzzle</button><button id="word-next" class="primary" hidden>Next difficulty →</button><p class="legend">Tap an earlier selected letter to trim the path back to it. Tap the last selected letter to undo one step. Drag mode also lets you trace with your finger. With a keyboard, Tab to a letter and press Enter.</p></section></div>
+    </div></main>
     <footer class="footer"><div class="shell"><div class="footer-main"><div><a class="brand" href="/"><span class="brand-mark">✦</span> Moonberry Play Lab</a><p>Little games. Bright minds. Big adventures.<br>Free, friendly learning games for curious explorers.</p></div><div><h4>Explore</h4><nav aria-label="Footer games"><a href="/words/">Word Trails</a><a href="/maths/">Asteroid Maths</a><a href="/memory/">Space Memory Match</a><a href="/robot/">Robot Rescue</a></nav></div><div><h4>Information</h4><nav aria-label="Footer information"><a href="/parents/">For Parents</a><a href="/about/">About</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></div></div><div class="footer-bottom"><span>© <span id="year"></span> Moonberry Play Lab</span><span>Made for learning, play and imagination ✨</span></div></div></footer>
     <script src="/assets/site.js" defer></script>
-    <script src="/assets/word-bank.js" defer></script><script src="/assets/words.js" defer></script>
+    <script src="/assets/words.js" defer></script>
     </body></html>

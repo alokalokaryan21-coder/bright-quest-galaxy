@@ -129,151 +129,77 @@ try {
     })();`
   });
   await go('/words/');
-  const ranges = [[3, 4], [4, 5], [5, 6], [6, 8]];
-  assert.deepEqual(await run(() => wordBank.map(entries => entries.length)), [30, 30, 30, 30]);
-  assert.ok(await run(ranges => {
-    const words = wordBank.flat().map(([word]) => word);
-    return new Set(words).size === words.length && wordBank.every((entries, level) =>
-      entries.every(([word, clue]) => /^[A-Z]+$/.test(word) &&
-        word.length >= ranges[level][0] && word.length <= ranges[level][1] && clue.trim().length > 0));
-  }, ranges));
+  assert.match(await run(() => document.querySelector('#daily-practice').textContent), /15 words today · Puzzle 1 of 5 · 2026-11-22/);
+  assert.deepEqual(await run(() => ({
+    total: document.querySelectorAll('#letters button').length,
+    blocked: document.querySelectorAll('#letters button:disabled').length > 0,
+    targets: document.querySelectorAll('#word-list button').length,
+    columns: getComputedStyle(document.querySelector('.word-layout')).gridTemplateColumns.split(' ').length,
+    timer: document.querySelector('#word-timer').textContent
+  })), { total: 25, blocked: true, targets: 3, columns: 2, timer: '00:00' });
 
-  const wordState = () => JSON.parse(localStorage.getItem('moonberry.word-trails.v1'));
-  const startWord = () => document.querySelector('#new-word').click();
-  await run(startWord);
-  await run(() => document.querySelector('.letter-tile').click());
-  const partial = await run(wordState);
-  const originalTiles = await run(() => document.querySelector('#letter-bank').textContent);
-  await run(() => document.querySelector('[data-level="1"]').click());
-  await run(startWord);
-  await run(() => document.querySelector('[data-level="0"]').click());
-  await go('/words/');
-  const refreshed = await run(wordState);
-  assert.equal(refreshed.active[0], partial.active[0]);
-  assert.deepEqual(refreshed.puzzles[partial.active[0]], partial.puzzles[partial.active[0]]);
-  assert.equal(await run(() => document.querySelector('#letter-bank').textContent), originalTiles);
-
-  function wordPath() {
-    const { level, active } = JSON.parse(localStorage.getItem('moonberry.word-trails.v1'));
-    const word = active[level];
-    const cells = [...document.querySelectorAll('.letter-tile')];
-    function find(path) {
-      if (path.length === word.length) return path;
-      const last = path.at(-1);
-      for (const [cell, button] of cells.entries()) {
-        if (button.textContent !== word[path.length] || path.includes(cell)) continue;
-        if (path.length && Math.abs(Math.floor(last / 4) - Math.floor(cell / 4)) + Math.abs(last % 4 - cell % 4) !== 1) continue;
-        const result = find([...path, cell]);
-        if (result) return result;
-      }
-    }
-    const path = find([]);
-    if (!path) throw Error('Word has no connected path: ' + word);
-    return { word, path };
-  }
-
-  await run(() => document.querySelector('#restart').click());
-  await run(() => document.querySelector('#hint').click());
-  assert.equal(await run(() => document.querySelectorAll('.letter-tile.is-hinted').length), 1);
-  const { path: firstPath } = await run(wordPath);
-  const dragPositions = await run(path => {
-    document.querySelector('#drag-mode').click();
-    const cells = [...document.querySelectorAll('.letter-tile')];
-    document.querySelector('#letter-bank').scrollIntoView({ block: 'center', behavior: 'instant' });
-    return path.slice(0, 2).map(cell => {
-      const { x, y, width, height } = cells[cell].getBoundingClientRect();
-      return { x: x + width / 2, y: y + height / 2 };
-    });
-  }, firstPath);
-  await call('Input.dispatchMouseEvent', { type: 'mousePressed', ...dragPositions[0], button: 'left', clickCount: 1 });
-  await call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...dragPositions[1], buttons: 1 });
-  await call('Input.dispatchMouseEvent', { type: 'mouseReleased', ...dragPositions[1], button: 'left', clickCount: 1 });
-  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 2);
-  await run(() => document.querySelector('#drag-mode').click());
   await run(() => {
-    document.querySelector('#restart').click();
-    const cells = document.querySelectorAll('.letter-tile');
-    cells[0].click();
-    cells[15].click();
+    document.querySelector('#word-touch-mode').click();
+    document.querySelector('#word-zoom').click();
   });
-  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 1);
-  assert.match(await run(() => document.querySelector('#game-status').textContent), /directly above/);
+  assert.ok(await run(() => document.querySelector('#trail-board').classList.contains('touch-drag') &&
+    document.querySelector('#trail-scroll').classList.contains('enlarged')));
   await run(() => {
-    document.querySelector('#restart').click();
-    document.querySelector('.letter-tile').focus();
+    document.querySelector('#word-touch-mode').click();
+    document.querySelector('#word-zoom').click();
+  });
+
+  const hint = () => document.querySelector('#word-hint').click();
+  await run(hint);
+  const firstPath = await run(() => document.querySelector('#spelling').textContent);
+  assert.match(firstPath, /^[A-Z]$/);
+  await go('/words/');
+  assert.equal(await run(() => document.querySelector('#spelling').textContent), firstPath);
+  await run(() => document.querySelector('#word-undo').click());
+  assert.equal(await run(() => document.querySelector('#spelling').textContent), 'Start on any letter');
+  await run(() => {
+    document.querySelector('#letters button:enabled').focus();
   });
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
-  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 1);
+  assert.match(await run(() => document.querySelector('#spelling').textContent), /^[A-Z]$/);
 
-  async function solveWord() {
-    const { word, path } = await run(wordPath);
-    await run(path => {
-      document.querySelector('#restart').click();
-      const cells = document.querySelectorAll('.letter-tile');
-      for (const cell of path) cells[cell].click();
-    }, path);
-    return word;
-  }
-  const firstWord = await solveWord();
-  assert.equal(await run(() => document.querySelector('#next').disabled), false);
-  await run(() => document.querySelector('#undo').click());
-  assert.equal(await run(() => document.querySelector('#next').disabled), true);
-  await run(cell => document.querySelectorAll('.letter-tile')[cell].click(), firstPath.at(-1));
-  assert.equal(await run(() => document.querySelector('#next').disabled), false);
-
-  for (let level = 0; level < 4; level++) {
-    await run(level => {
-      document.querySelector(`[data-level="${level}"]`).click();
-      document.querySelector('#new-word').click();
-    }, level);
-    for (let word = 0; word < 5; word++) {
-      const spelling = await solveWord();
-      assert.ok(spelling.length >= ranges[level][0] && spelling.length <= ranges[level][1]);
-      await run(() => document.querySelector('#next').click());
+  const counts = [3, 4, 5];
+  for (const [level, count] of counts.entries()) {
+    await run(level => document.querySelector(`[data-difficulty="${level}"]`).click(), level);
+    const found = new Set();
+    for (let round = 0; round < 5; round++) {
+      assert.match(await run(() => document.querySelector('#daily-practice').textContent), new RegExp(`Puzzle ${round + 1} of 5`));
+      const completed = await run(() => {
+        const hint = document.querySelector('#word-hint');
+        for (let step = 0; step < 64 && !hint.disabled; step++) hint.click();
+        if (document.querySelector('#word-celebration').hidden) throw Error('Puzzle could not be completed');
+        return [...document.querySelectorAll('#word-list button.complete')].map(button => button.ariaLabel.split(',')[0]);
+      });
+      assert.equal(completed.length, count);
+      completed.forEach(word => {
+        assert.ok(!found.has(word), 'Word repeated in the same difficulty and day');
+        found.add(word);
+      });
+      await run(() => document.querySelector('#word-new').click());
     }
-    assert.match(await run(() => document.querySelector('#stats').textContent), /^0 new challenges/);
-    assert.match(await run(() => document.querySelector('#game-status').textContent), /today’s limit/);
+    assert.match(await run(() => document.querySelector('#daily-practice').textContent), /Puzzle 1 of 5/);
   }
-  const yesterday = await run(wordState);
-  assert.equal(Object.keys(yesterday.puzzles).length, 20);
+  await run(() => document.querySelector('#word-restart').click());
+  assert.match(await run(() => document.querySelector('#word-progress').textContent), /^0 \/ 5 words$/);
   await run(() => {
-    document.querySelector('[data-level="0"]').click();
-    const history = document.querySelector('#puzzle-history');
-    history.selectedIndex = 1;
-    history.dispatchEvent(new Event('change'));
+    window.testDate = [2026, 10, 23, 12];
+    document.querySelector('#word-new').click();
   });
-  assert.equal(await run(() => document.querySelector('#next').disabled), true);
-  assert.equal(await solveWord(), firstWord);
-  assert.equal(Object.keys((await run(wordState)).puzzles).length, 20);
-
-  await run(() => window.beginMidnight());
-  await until(async () => (await run(() => document.querySelector('#stats').textContent)).startsWith('5 new'), 'local midnight rollover');
-  await run(() => document.querySelector('#next').click());
-  const today = await run(wordState);
-  assert.equal(Object.keys(today.puzzles).length, 21);
-  assert.ok(!Object.hasOwn(yesterday.puzzles, today.active[0]));
-  assert.notEqual(today.puzzles[today.active[0]].day, yesterday.puzzles[firstWord].day);
-  await run(() => {
-    const key = 'moonberry.word-trails.v1';
-    const state = JSON.parse(localStorage.getItem(key));
-    for (const [word] of wordBank[0]) {
-      state.puzzles[word] ||= {level: 0, day: '2026-11-1', tiles: [...word], typed: [], completed: true};
-    }
-    localStorage.setItem(key, JSON.stringify(state));
-  });
-  await go('/words/');
-  await solveWord();
-  assert.match(await run(() => document.querySelector('#game-status').textContent), /explored every word/);
-
+  assert.match(await run(() => document.querySelector('#daily-practice').textContent), /Puzzle 1 of 5 · 2026-11-23/);
   await call('Page.removeScriptToEvaluateOnNewDocument', clock);
+
   const blockedStorage = await call('Page.addScriptToEvaluateOnNewDocument', {
     source: "Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Blocked', 'SecurityError'); } });"
   });
   await go('/words/');
-  await run(startWord);
-  assert.match(await run(() => document.querySelector('#stats').textContent), /4 new challenges left today · This visit only/);
-  assert.ok(await run(() => document.querySelectorAll('.letter-tile').length >= 3));
+  await run(hint);
+  assert.match(await run(() => document.querySelector('#spelling').textContent), /^[A-Z]$/);
   await call('Page.removeScriptToEvaluateOnNewDocument', blockedStorage);
 
   function solveMaths(type, prompt) {
@@ -401,7 +327,7 @@ try {
 
   await go('/words/');
   assert.ok(await run(() => document.documentElement.scrollWidth <= innerWidth));
-  assert.equal(await run(() => getComputedStyle(document.querySelector('.trails-layout')).gridTemplateColumns.split(' ').length), 1);
+  assert.equal(await run(() => getComputedStyle(document.querySelector('.word-layout')).gridTemplateColumns.split(' ').length), 1);
   await go('/memory/');
   const order = () => [...document.querySelectorAll('.memory-card')].map(card => card.dataset.symbol).join('|');
   const firstOrder = await run(order);

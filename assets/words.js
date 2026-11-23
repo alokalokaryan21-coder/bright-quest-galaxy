@@ -1,416 +1,698 @@
 (() => {
-  const bank = document.querySelector('#letter-bank');
-  if (!bank) return;
-
-  const storageKey = 'moonberry.word-trails.v1';
-  const dailyLimit = 5;
-  const levels = [...document.querySelectorAll('[data-level]')];
-  const clues = wordBank.map(entries => new Map(entries));
-  const clue = document.querySelector('#clue');
-  const slots = document.querySelector('#word-slots');
-  const stats = document.querySelector('#stats');
-  const status = document.querySelector('#game-status');
-  const history = document.querySelector('#puzzle-history');
-  const undo = document.querySelector('#undo');
-  const hint = document.querySelector('#hint');
-  const restart = document.querySelector('#restart');
-  const next = document.querySelector('#next');
-  const start = document.querySelector('#new-word');
-  const drag = document.querySelector('#drag-mode');
-  const timer = document.querySelector('#trail-timer');
-  const size = 4;
-  let board;
-  let hinted;
-  let activePointer = null;
-  let previousCell = null;
-
-  function readProgress() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey));
-      if (saved?.puzzles && Array.isArray(saved.active) && clues[saved.level]) return saved;
-    } catch {
-      // Storage can be unavailable in a private or restricted browser.
+  const levels = [
+    {
+      name: "Little explorer",
+      size: 5,
+      count: 3,
+      bank: "MOON STAR ROBOT COMET EARTH SPACE ORBIT ALIEN LIGHT CLOUD RAIN STORM SNOW WIND SUN SKY TREE LEAF SEED ROOT BIRD FISH WHALE SHARK TIGER LION BEAR HORSE ZEBRA PANDA APPLE GRAPE PEACH MANGO LEMON TRAIN BOAT PLANE BIKE WHEEL BRICK HOUSE DOOR CHAIR TABLE BOOK PAPER PAINT MUSIC DRUM MAGIC HAPPY SMILE DREAM WATER RIVER BEACH SHELL STONE FLAME".split(
+        " ",
+      ),
+    },
+    {
+      name: "Space traveller",
+      size: 6,
+      count: 4,
+      bank: "PLANET ROCKET GALAXY METEOR SATURN JUPITER NEPTUNE GRAVITY SOLAR LUNAR COSMOS ECLIPSE CRATER AURORA NEBULA ORANGE BANANA CHERRY CARROT GARDEN FOREST JUNGLE DESERT ISLAND OCEAN STREAM VOLCANO CRYSTAL MINERAL FOSSIL ENERGY MAGNET CIRCUIT CODING PUZZLE NUMBER PATTERN SHADOW MIRROR COLOUR RAINBOW THUNDER SPARKLE DOLPHIN PENGUIN GIRAFFE MONKEY RABBIT TURTLE OCTOPUS DRAGON CASTLE PIRATE BRIDGE TUNNEL ENGINE CAMERA INVENT EXPLORE JOURNEY".split(
+        " ",
+      ),
+    },
+    {
+      name: "Word wizard",
+      size: 8,
+      count: 5,
+      bank: "ELIXIR TEXTURE LITERATE ASTEROID ASTRONAUT SATELLITE TELESCOPE UNIVERSE SUPERNOVA STARDUST EQUINOX SOLSTICE GALACTIC CELESTIAL ROTATION REVOLUTION EXPLORER DISCOVERY ADVENTURE INVENTION CREATIVE IMAGINE MYSTERY CURIOUS COURAGE PATIENCE STRATEGY SOLUTION SEQUENCE ALGORITHM VARIABLE FUNCTION COMPUTER KEYBOARD SOFTWARE HARDWARE NETWORK INTERNET ELECTRON ELEMENT MOLECULE CHEMICAL REACTION FRICTION MOMENTUM VELOCITY PRESSURE VIBRATION REFLECTION REFRACTION SPECTRUM RADIATION HABITAT WILDLIFE DINOSAUR SKELETON BUTTERFLY CHAMELEON CROCODILE CAMOUFLAGE".split(
+        " ",
+      ),
+    },
+  ];
+  const rounds = [0, 0, 0];
+  let dailyKey = "",
+    puzzles = [];
+  function todayKey() {
+    const d = new Date();
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join("-");
+  }
+  function randomFor(key) {
+    let seed = 2166136261;
+    for (const c of key) seed = Math.imul(seed ^ c.charCodeAt(0), 16777619);
+    return () => {
+      seed += 0x6d2b79f5;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(items, rng) {
+    const a = [...items];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
     }
-    return { level: 0, active: [null, null, null, null], puzzles: {} };
+    return a;
   }
-
-  let progress = readProgress();
-  let sessionOnly = false;
-  let midnightTimer;
-
-  function saveProgress() {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(progress));
-    } catch {
-      sessionOnly = true;
-    }
-  }
-
-  function localDay(now = new Date()) {
-    return [now.getFullYear(), now.getMonth() + 1, now.getDate()].join('-');
-  }
-
-  function activeWord() {
-    return progress.active[progress.level];
-  }
-
-  function isSolved(word, puzzle) {
-    return puzzle.typed.map(index => puzzle.tiles[index]).join('') === word;
-  }
-
-  function allowance() {
-    const today = localDay();
-    const issued = Object.values(progress.puzzles).filter(puzzle =>
-      puzzle.level === progress.level && puzzle.day === today
-    ).length;
-    const unused = wordBank[progress.level].filter(([word]) => !Object.hasOwn(progress.puzzles, word));
-    return { remaining: Math.max(0, dailyLimit - issued), unused };
-  }
-
-  function availabilityMessage() {
-    const { remaining, unused } = allowance();
-    if (!unused.length) return 'You’ve explored every word at this level! Replay a puzzle or try another level.';
-    if (!remaining) return 'You’ve reached today’s limit. Replay a puzzle or come back tomorrow for more!';
-    return '';
-  }
-
-  function updateAllowance() {
-    const { remaining, unused } = allowance();
-    const available = Math.min(remaining, unused.length);
-    stats.textContent = `${available} new challenge${available === 1 ? '' : 's'} left today${sessionOnly ? ' · This visit only' : ''}`;
-    start.disabled = available === 0;
-    if (!activeWord()) status.textContent = availabilityMessage() || 'Each level has up to five new challenges per day.';
-  }
-
-  function scheduleMidnight() {
-    clearTimeout(midnightTimer);
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    midnightTimer = setTimeout(refreshDay, midnight - now);
-  }
-
-  function refreshDay() {
-    updateAllowance();
-    const word = activeWord();
-    if (word && isSolved(word, progress.puzzles[word])) {
-      status.textContent = completionMessage();
-    }
-    scheduleMidnight();
-  }
-
-  function completionMessage() {
-    return `Wonderful! You spelled it! 🌟 ${availabilityMessage()}`.trim();
-  }
-
-  function renderHistory() {
-    const words = Object.entries(progress.puzzles).filter(([, puzzle]) => puzzle.level === progress.level);
-    history.replaceChildren(new Option('Choose a puzzle', ''));
-    history.options[0].disabled = true;
-    words.forEach(([word, puzzle], index) => {
-      history.add(new Option(`Puzzle ${index + 1} · ${puzzle.completed ? 'Replay' : 'Continue'}`, word));
+  function windingRoute(n, rng) {
+    let route = Array.from({ length: n * n }, (_, i) => {
+      const row = Math.floor(i / n);
+      return row * n + (row % 2 ? n - 1 - (i % n) : i % n);
     });
-    history.value = activeWord() || '';
-    history.parentElement.hidden = words.length === 0;
-  }
-
-  function makeBoard(word, tiles) {
-    // Keep the same board for a saved puzzle, including progress from the tile layout.
-    const seed = [...tiles.join('')].reduce((hash, letter) => (hash * 31 + letter.charCodeAt(0)) >>> 0, 0);
-    const cells = Array(size * size);
-    const positions = [];
-    const letters = [...tiles];
-    const offset = Math.floor(seed / 8) % (cells.length - word.length + 1);
-    const unused = new Set(tiles.keys());
-    const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter(letter => !word.includes(letter));
-
-    [...word].forEach((letter, index) => {
-      const part = offset + index;
-      let row = Math.floor(part / size);
-      let column = part % size;
-      if (row % 2) column = size - 1 - column;
-      if (seed & 1) row = size - 1 - row;
-      if (seed & 2) column = size - 1 - column;
-      if (seed & 4) [row, column] = [column, row];
-      const tile = [...unused].find(candidate => tiles[candidate] === letter);
-      unused.delete(tile);
-      const cell = row * size + column;
-      cells[cell] = tile;
-      positions[tile] = cell;
-    });
-
-    for (let cell = 0; cell < cells.length; cell++) {
-      if (cells[cell] !== undefined) continue;
-      cells[cell] = letters.length;
-      positions.push(cell);
-      letters.push(alphabet[(seed + cell * 11) % alphabet.length]);
-    }
-    return { cells, positions, letters };
-  }
-
-  function neighbours(first, second) {
-    const a = board.positions[first];
-    const b = board.positions[second];
-    return Math.abs(Math.floor(a / size) - Math.floor(b / size)) + Math.abs(a % size - b % size) === 1;
-  }
-
-  function updateTimer() {
-    const puzzle = progress.puzzles[activeWord()];
-    const elapsed = puzzle?.began ? Math.max(0, Math.floor(((puzzle.finishedAt || Date.now()) - puzzle.began) / 1000)) : 0;
-    const time = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
-    if (timer.textContent !== time) timer.textContent = time;
-  }
-
-  function renderAnswer(word, puzzle) {
-    const solved = Boolean(puzzle && isSolved(word, puzzle));
-    const letters = puzzle?.typed.map(index => board.letters[index]) || [];
-    slots.replaceChildren();
-    for (let index = 0; index < (word?.length || 0); index++) {
-      const slot = document.createElement('span');
-      slot.className = 'word-slot';
-      slot.textContent = letters[index] || '';
-      slot.setAttribute('aria-label', letters[index] || 'Empty letter');
-      slots.append(slot);
-    }
-    for (const tile of bank.children) {
-      const index = Number(tile.dataset.index);
-      const step = puzzle.typed.indexOf(index);
-      tile.setAttribute('aria-pressed', String(step >= 0));
-      tile.classList.toggle('is-hinted', index === hinted);
-      delete tile.dataset.link;
-      const previous = puzzle.typed[step - 1];
-      if (step > 0 && neighbours(index, previous)) {
-        const offset = board.positions[previous] - board.positions[index];
-        tile.dataset.link = { [-size]: 'up', [size]: 'down', [-1]: 'left', [1]: 'right' }[offset];
+    // Backbite moves mix a full-board path while preserving neighbouring cells.
+    for (let step = 0; step < n * n * 12; step++) {
+      if (rng() < 0.5) route.reverse();
+      const head = route[0],
+        options = [];
+      for (let i = 2; i < route.length; i++)
+        if (
+          Math.abs((head % n) - (route[i] % n)) +
+            Math.abs(Math.floor(head / n) - Math.floor(route[i] / n)) ===
+          1
+        )
+          options.push(i);
+      if (options.length) {
+        const k = options[Math.floor(rng() * options.length)];
+        route = [...route.slice(0, k).reverse(), ...route.slice(k)];
       }
     }
-    bank.classList.toggle('is-complete', solved);
-    undo.disabled = letters.length === 0;
-    hint.disabled = !puzzle || solved;
-    restart.disabled = !puzzle || letters.length === 0;
-    next.hidden = !puzzle;
-    next.disabled = !solved;
-    start.hidden = Boolean(puzzle);
-    drag.hidden = !puzzle;
-    updateAllowance();
-    updateTimer();
+    return route;
   }
-
-  function selectTile(index, tracing = false) {
-    const word = activeWord();
-    const puzzle = progress.puzzles[word];
-    const existing = puzzle.typed.indexOf(index);
-    if (existing >= 0) {
-      if (tracing || isSolved(word, puzzle)) return;
-      puzzle.typed.length = existing === puzzle.typed.length - 1 ? existing : existing + 1;
-    } else {
-      if (puzzle.typed.length === word.length) return;
-      if (puzzle.typed.length && !neighbours(puzzle.typed.at(-1), index)) {
-        if (!tracing) status.textContent = 'Choose a letter directly above, below, left, or right of the last letter.';
+  function bendCount(path) {
+    let bends = 0;
+    for (let i = 2; i < path.length; i++)
+      if (path[i] - path[i - 1] !== path[i - 1] - path[i - 2]) bends++;
+    return bends;
+  }
+  function buildDaily(key) {
+    return levels.map((level, index) => {
+      const rng = randomFor(`${key}:${index}`),
+        words = shuffle(level.bank, rng).slice(0, level.count * 5);
+      return Array.from({ length: 5 }, (_, round) => {
+        const n = level.size,
+          texts = words.slice(round * level.count, (round + 1) * level.count);
+        let entries,
+          bestScore = -1;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const route = windingRoute(n, rng);
+          let offset = 0;
+          const candidate = texts.map((text) => {
+            const path = route.slice(offset, offset + text.length);
+            offset += text.length + 1;
+            return { text, path };
+          });
+          const score = candidate.reduce(
+            (sum, w) => sum + Math.min(index === 0 ? 1 : 2, bendCount(w.path)),
+            0,
+          );
+          if (score > bestScore) {
+            entries = candidate;
+            bestScore = score;
+          }
+          if (score === texts.length * (index === 0 ? 1 : 2)) break;
+        }
+        return {
+          name: level.name,
+          size: n,
+          words: entries.sort((a, b) => a.text.length - b.text.length),
+        };
+      });
+    });
+  }
+  let savedPuzzles = {};
+  let savedDifficulty = 0;
+  const storageKey = () => `moonberry.word-trails.board.v2.${dailyKey}`;
+  function refreshDaily() {
+    const key = todayKey();
+    if (key === dailyKey) return false;
+    dailyKey = key;
+    puzzles = buildDaily(key);
+    rounds.fill(0);
+    savedPuzzles = {};
+    savedDifficulty = 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey()));
+      if (saved?.rounds?.length === levels.length) {
+        saved.rounds.forEach((round, index) => {
+          if (Number.isInteger(round) && round >= 0 && round < 5)
+            rounds[index] = round;
+        });
+        savedPuzzles = saved.puzzles || {};
+        if (levels[saved.difficulty]) savedDifficulty = saved.difficulty;
+      }
+    } catch {
+      // An unavailable browser store still allows play for this visit.
+    }
+    return true;
+  }
+  refreshDaily();
+  const colours = ["#1593d7", "#9e68d7", "#ef8964", "#35aa85", "#e4b535"],
+    tints = ["#c9eaff", "#e7d4fb", "#ffe0d3", "#d5f3e6", "#fff0bd"];
+  let touchDrag = false,
+    lastPointerCell = null;
+  let difficulty = 0,
+    selected = 0,
+    trail = [],
+    completed = new Map(),
+    revealed = new Map(),
+    history = [],
+    hintCell = null,
+    dragging = false,
+    letters = [];
+  const byId = (id) => document.getElementById(id),
+    current = () => puzzles[difficulty][rounds[difficulty]],
+    adjacent = (a, b) =>
+      Math.abs(
+        Math.floor(a / current().size) - Math.floor(b / current().size),
+      ) +
+        Math.abs((a % current().size) - (b % current().size)) ===
+      1;
+  let timerStartedAt = null,
+    timerElapsed = 0;
+  function elapsedTime() {
+    return (
+      timerElapsed +
+      (timerStartedAt === null ? 0 : performance.now() - timerStartedAt)
+    );
+  }
+  function formatTime(ms) {
+    const seconds = Math.floor(ms / 1000);
+    return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  }
+  function drawTimer() {
+    byId("word-timer").textContent = formatTime(elapsedTime());
+  }
+  function startTimer() {
+    if (timerStartedAt === null) timerStartedAt = performance.now();
+    drawTimer();
+  }
+  function stopTimer() {
+    timerElapsed = elapsedTime();
+    timerStartedAt = null;
+    drawTimer();
+  }
+  function resetTimer() {
+    timerStartedAt = null;
+    timerElapsed = 0;
+    drawTimer();
+  }
+  setInterval(drawTimer, 250);
+  function busyCells() {
+    return new Set([...completed.values()].flat());
+  }
+  function savePuzzle() {
+    savedPuzzles[`${difficulty}:${rounds[difficulty]}`] = {
+      selected,
+      trail,
+      completed: [...completed],
+      revealed: [...revealed],
+      history,
+      elapsed: elapsedTime(),
+      running: timerStartedAt !== null,
+    };
+    try {
+      localStorage.setItem(
+        storageKey(),
+        JSON.stringify({ difficulty, rounds, puzzles: savedPuzzles }),
+      );
+    } catch {
+      // Keep this visit playable when browser storage is blocked.
+    }
+  }
+  function draw() {
+    const p = current(),
+      word = p.words[selected].text,
+      used = busyCells();
+    const finished = completed.size === p.words.length;
+    byId("word-celebration").hidden = !finished;
+    byId("timer-badge").className = finished
+      ? "timer-badge timer-complete"
+      : "timer-badge";
+    byId("word-finish-time").textContent = finished
+      ? formatTime(timerElapsed)
+      : "";
+    document.querySelectorAll("#letters button").forEach((button, i) => {
+      button.className = letters[i] ? "" : "blocked";
+      if (used.has(i)) {
+        button.classList.add("done");
+        const j = [...completed].find(([, path]) => path.includes(i))[0];
+        button.style.setProperty("--trail-tint", tints[j]);
+      } else button.style.removeProperty("--trail-tint");
+      if (trail.includes(i)) button.classList.add("current");
+      if (hintCell === i) button.classList.add("hinted");
+      button.setAttribute(
+        "aria-label",
+        letters[i]
+          ? `${letters[i]}, row ${Math.floor(i / p.size) + 1}, column ${(i % p.size) + 1}${used.has(i) ? ", completed word" : ""}`
+          : "Blocked square",
+      );
+    });
+    document.querySelectorAll("#word-list button").forEach((b, i) => {
+      const answer = p.words[i].text,
+        revealCount = completed.has(i) ? answer.length : revealed.get(i) || 0;
+      b.replaceChildren();
+      b.style.setProperty("--letter-count", answer.length);
+      b.style.setProperty(
+        "--letter-colour",
+        ["#096799", "#7044a3", "#a04426", "#14634d", "#765900"][i],
+      );
+      b.className = completed.has(i) ? "complete" : "";
+      b.setAttribute("aria-pressed", String(i === selected));
+      b.setAttribute(
+        "aria-label",
+        completed.has(i)
+          ? `${answer}, completed`
+          : `Word ${i + 1}, ${answer.length} letters. ${revealCount ? answer.slice(0, revealCount).split("").join(" ") + ", " + (answer.length - revealCount) + " hidden letters." : "All letters hidden."} ${i === selected && trail.length ? "Trying " + trail.map((n) => letters[n]).join(" ") + ". " : ""}Select for a hint.`,
+      );
+      const boxes = document.createElement("span");
+      boxes.className = "word-boxes";
+      boxes.setAttribute("aria-hidden", "true");
+      for (const [letterIndex, letter] of [...answer].entries()) {
+        const box = document.createElement("span");
+        box.className = "word-box";
+        const trying =
+          i === selected && !completed.has(i) && letterIndex < trail.length;
+        box.textContent = trying
+          ? letters[trail[letterIndex]]
+          : letterIndex < revealCount
+            ? letter
+            : "";
+        if (trying) box.classList.add("trying");
+        boxes.append(box);
+      }
+      b.append(boxes);
+      const tick = document.createElement("span");
+      tick.className = "word-tick";
+      tick.setAttribute("aria-hidden", "true");
+      tick.textContent = completed.has(i) ? "✓" : "";
+      b.append(tick);
+    });
+    byId("spelling").textContent =
+      completed.size === p.words.length
+        ? "All words found!"
+        : trail.length
+          ? trail.map((n) => letters[n]).join(" ")
+          : "Start on any letter";
+    byId("word-progress").textContent =
+      `${completed.size} / ${p.words.length} words`;
+    byId("daily-practice").textContent =
+      `${levels[difficulty].count * 5} words today · Puzzle ${rounds[difficulty] + 1} of 5 · ${dailyKey}`;
+    byId("word-new").textContent =
+      rounds[difficulty] === 4 ? "↻ Review today’s puzzles" : "New puzzle →";
+    byId("word-next").hidden =
+      completed.size !== p.words.length || difficulty === puzzles.length - 1;
+    savePuzzle();
+    byId("word-undo").disabled = trail.length === 0 && history.length === 0;
+    byId("word-clear").disabled = trail.length === 0;
+    byId("word-hint").disabled =
+      completed.size === p.words.length || completed.has(selected);
+    const svg = byId("trail-lines");
+    svg.setAttribute("viewBox", `0 0 ${p.size * 100} ${p.size * 100}`);
+    svg.replaceChildren();
+    for (const [j, path] of [...completed.entries(), [selected, trail]]) {
+      if (!path.length) continue;
+      const line = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "polyline",
+      );
+      const points = path.length === 1 ? [path[0], path[0]] : path;
+      line.setAttribute(
+        "points",
+        points
+          .map(
+            (i) =>
+              `${(i % p.size) * 100 + 50},${Math.floor(i / p.size) * 100 + 50}`,
+          )
+          .join(" "),
+      );
+      line.setAttribute("fill", "none");
+      line.setAttribute("stroke", colours[j]);
+      line.setAttribute("stroke-width", "58");
+      line.setAttribute("stroke-linecap", "round");
+      line.setAttribute("stroke-linejoin", "round");
+      svg.append(line);
+      for (let step = 1; step < path.length; step++) {
+        const from = path[step - 1],
+          to = path[step],
+          x1 = (from % p.size) * 100 + 50,
+          y1 = Math.floor(from / p.size) * 100 + 50,
+          x2 = (to % p.size) * 100 + 50,
+          y2 = Math.floor(to / p.size) * 100 + 50;
+        const arrow = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "polyline",
+        );
+        arrow.setAttribute("points", "-5,-8 3,0 -5,8");
+        arrow.setAttribute(
+          "transform",
+          `translate(${(x1 + x2) / 2} ${(y1 + y2) / 2}) rotate(${(Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI})`,
+        );
+        arrow.setAttribute("fill", "none");
+        arrow.setAttribute("stroke", "#102943");
+        arrow.setAttribute("stroke-width", "3.5");
+        arrow.setAttribute("stroke-linecap", "round");
+        arrow.setAttribute("stroke-linejoin", "round");
+        svg.append(arrow);
+      }
+    }
+  }
+  function chooseWord(i) {
+    if (completed.has(i)) return;
+    selected = i;
+    trail = [];
+    hintCell = null;
+    byId("word-message").textContent =
+      "Start on any letter and try a combination. Select a word if you would like a hint.";
+    draw();
+  }
+  // Find a complete, non-overlapping solution, optionally fixing a candidate path.
+  // A correctly spelled word is accepted only if the whole board remains solvable.
+  function remainingSolution(
+    fixed = new Map(),
+    preferredIndex = -1,
+    prefix = [],
+  ) {
+    const p = current(),
+      locked = new Map([...completed, ...fixed]);
+    const bit = (cell) => 1n << BigInt(cell);
+    let occupied = 0n;
+    for (const [index, path] of locked) {
+      const word = p.words[index];
+      if (path.length !== word.text.length) return null;
+      let own = 0n;
+      for (let i = 0; i < path.length; i++) {
+        const cell = path[i],
+          mask = bit(cell);
+        if (
+          letters[cell] !== word.text[i] ||
+          (i && !adjacent(path[i - 1], cell)) ||
+          (occupied | own) & mask
+        )
+          return null;
+        own |= mask;
+      }
+      occupied |= own;
+    }
+    const neighbours = letters.map((letter, cell) =>
+      letter
+        ? letters.flatMap((l, i) => (l && adjacent(cell, i) ? [i] : []))
+        : [],
+    );
+    const options = new Map();
+    for (let index = 0; index < p.words.length; index++) {
+      if (locked.has(index)) continue;
+      const word = p.words[index].text,
+        paths = [];
+      function walk(path, mask) {
+        if (path.length === word.length) {
+          paths.push({ path: [...path], mask });
+          return;
+        }
+        const forced =
+          index === preferredIndex ? prefix[path.length] : undefined;
+        const next =
+          forced !== undefined
+            ? [forced]
+            : path.length
+              ? neighbours[path.at(-1)]
+              : letters.map((_, i) => i);
+        for (const cell of next) {
+          const flag = bit(cell);
+          if (
+            letters[cell] !== word[path.length] ||
+            (occupied | mask) & flag ||
+            (path.length && !adjacent(path.at(-1), cell))
+          )
+            continue;
+          path.push(cell);
+          walk(path, mask | flag);
+          path.pop();
+        }
+      }
+      walk([], 0n);
+      if (!paths.length) return null;
+      options.set(index, paths);
+    }
+    const failed = new Set();
+    function solve(left, used, plan) {
+      if (!left.length) return plan;
+      const key = left.join(",") + ":" + used;
+      if (failed.has(key)) return null;
+      let best = -1,
+        choices = null;
+      for (const index of left) {
+        const available = options.get(index).filter((o) => !(o.mask & used));
+        if (!available.length) {
+          failed.add(key);
+          return null;
+        }
+        if (!choices || available.length < choices.length) {
+          best = index;
+          choices = available;
+        }
+      }
+      for (const choice of choices) {
+        const result = solve(
+          left.filter((i) => i !== best),
+          used | choice.mask,
+          new Map([...plan, [best, choice.path]]),
+        );
+        if (result) return result;
+      }
+      failed.add(key);
+      return null;
+    }
+    return solve([...options.keys()], occupied, locked);
+  }
+  function visit(i, mode = "tap") {
+    const p = current();
+    if (!letters[i] || completed.size === p.words.length) return;
+    const back = trail.indexOf(i);
+    if (back >= 0) {
+      if (back === trail.length - 1) {
+        if (mode === "drag") return;
+        undo();
         return;
       }
-      puzzle.began ||= Date.now();
-      puzzle.typed.push(index);
+      trail = trail.slice(0, back + 1);
+      hintCell = null;
+      draw();
+      return;
     }
-
-    const solved = isSolved(word, puzzle);
-    if (solved) {
-      puzzle.completed = true;
-      puzzle.finishedAt = Date.now();
+    if (busyCells().has(i)) {
+      byId("word-message").textContent =
+        "That letter belongs to a completed word. Try another square.";
+      return;
     }
-    hinted = undefined;
-    saveProgress();
-    renderAnswer(word, puzzle);
-    if (solved) {
-      renderHistory();
-      status.textContent = completionMessage();
-      next.focus();
-    } else {
-      status.textContent = puzzle.typed.length === word.length
-        ? 'Not quite. Undo a letter and try a different path.'
-        : 'Keep following the trail!';
+    if (trail.includes(i) || (trail.length && !adjacent(trail.at(-1), i))) {
+      byId("word-message").textContent =
+        "Move to a neighbouring square: up, down, left or right.";
+      return;
+    }
+    startTimer();
+    if (!trail.length) {
+      const owner = p.words.findIndex(
+        (w, j) => !completed.has(j) && w.path.includes(i),
+      );
+      if (owner >= 0) selected = owner;
+    }
+    trail.push(i);
+    hintCell = null;
+    const spelling = trail.map((n) => letters[n]).join("");
+    const foundIndex = p.words.findIndex(
+      (word, index) => !completed.has(index) && word.text === spelling,
+    );
+    const found =
+      foundIndex < 0 ? null : { word: p.words[foundIndex], index: foundIndex };
+    if (found) selected = found.index;
+    byId("word-message").textContent =
+      "Try your combination. Keep tracing, use Undo, or clear the path to start again.";
+    if (found && !remainingSolution(new Map([[found.index, [...trail]]]))) {
+      dragging = false;
+      byId("word-message").textContent =
+        `${found.word.text} is a word, but this route blocks another word. Try a different route. Use Undo or tap an earlier letter.`;
+      draw();
+      return;
+    }
+    if (found) {
+      dragging = false;
+      completed.set(found.index, [...trail]);
+      history.push(found.index);
+      trail = [];
+      if (completed.size === p.words.length) {
+        stopTimer();
+        byId("word-message").textContent =
+          `Wonderful! You found every word in ${formatTime(timerElapsed)}. ⭐`;
+      } else {
+        selected = p.words.findIndex((w, j) => !completed.has(j));
+        byId("word-message").textContent =
+          `${found.word.text} found! Discover any remaining word.`;
+      }
+    }
+    draw();
+  }
+  function hint() {
+    const index = selected,
+      word = current().words[index];
+    if (completed.has(index)) return;
+    // Continue a viable player path; otherwise guide along a solvable alternative.
+    let plan = remainingSolution(new Map(), index, trail),
+      previous = trail.length;
+    if (!plan) {
+      plan = remainingSolution();
+      previous = 0;
+    }
+    if (!plan) {
+      byId("word-message").textContent =
+        "Use Undo to reopen the last word and try another route.";
+      return;
+    }
+    const path = plan.get(index),
+      count = Math.min(previous + 1, word.text.length);
+    startTimer();
+    revealed.set(index, Math.max(revealed.get(index) || 0, count));
+    trail = path.slice(0, count - 1);
+    visit(path[count - 1]);
+    if (!completed.has(index)) {
+      hintCell = path[count - 1];
+      byId("word-message").textContent =
+        `${count} of ${word.text.length} letters selected. Tap Hint to add the next letter, or keep tracing yourself.`;
+      draw();
     }
   }
 
-  function renderPuzzle() {
-    const word = activeWord();
-    const puzzle = progress.puzzles[word];
-    const description = clues[progress.level].get(word);
-    clue.textContent = description ? `${description} (${word.length} letters)` : 'Choose a level and start a word';
-    bank.replaceChildren();
-    bank.hidden = !puzzle;
-    hinted = undefined;
-    if (puzzle) {
-      board = makeBoard(word, puzzle.tiles);
-      board.cells.forEach((index, cell) => {
-        const tile = document.createElement('button');
-        tile.type = 'button';
-        tile.className = 'letter-tile';
-        tile.textContent = board.letters[index];
-        tile.dataset.index = index;
-        tile.setAttribute('aria-label', `${tile.textContent}, row ${Math.floor(cell / size) + 1}, column ${cell % size + 1}`);
-        tile.addEventListener('click', event => {
-          if (!bank.classList.contains('drag-enabled') || event.detail === 0) selectTile(index);
-        });
-        bank.append(tile);
+  function undo() {
+    if (completed.size === current().words.length && history.length)
+      startTimer();
+    if (trail.length) trail.pop();
+    else if (history.length) {
+      selected = history.pop();
+      trail = completed.get(selected).slice(0, -1);
+      completed.delete(selected);
+    }
+    hintCell = null;
+    byId("word-message").textContent = "One step back. Try another way!";
+    draw();
+  }
+  function loadPuzzle(i, restore = true) {
+    resetTimer();
+    refreshDaily();
+    difficulty = i;
+    selected = 0;
+    trail = [];
+    completed.clear();
+    revealed.clear();
+    history = [];
+    hintCell = null;
+    dragging = false;
+    const p = current();
+    letters = Array(p.size * p.size).fill("");
+    p.words.forEach((w) =>
+      w.path.forEach((cell, j) => (letters[cell] = w.text[j])),
+    );
+    byId("trail-board").style.setProperty("--board-cells", p.size);
+    byId("puzzle-title").textContent = p.name;
+    byId("letters").style.gridTemplateColumns = `repeat(${p.size},1fr)`;
+    byId("letters").replaceChildren();
+    letters.forEach((letter, n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.cell = n;
+      b.textContent = letter;
+      b.disabled = !letter;
+      let touchTap = false;
+      b.addEventListener("pointerdown", (e) => {
+        touchTap = e.pointerType === "touch" && !touchDrag;
+        if (touchTap) return;
+        if (e.button !== 0) return;
+        e.preventDefault();
+        dragging = true;
+        lastPointerCell = n;
+        visit(n);
       });
-      status.textContent = isSolved(word, puzzle)
-        ? completionMessage()
-        : puzzle.typed.length === word.length
-          ? 'Not quite. Undo a letter and try a different path.'
-          : 'Follow neighbouring letters to build the word.';
-    }
-    renderAnswer(word, puzzle);
-    renderHistory();
-  }
-
-  function nextHint(word, path) {
-    if (path.some((tile, index) => board.letters[tile] !== word[index])) return undefined;
-    if (path.length === word.length) return path.at(-1);
-    for (const tile of board.cells) {
-      if (board.letters[tile] !== word[path.length] || path.includes(tile)) continue;
-      if (path.length && !neighbours(path.at(-1), tile)) continue;
-      if (nextHint(word, [...path, tile]) !== undefined) return tile;
-    }
-    return undefined;
-  }
-
-  function tracePointer(event) {
-    const tile = document.elementFromPoint(event.clientX, event.clientY)?.closest('.letter-tile');
-    if (!tile || !bank.contains(tile) || tile === previousCell) return;
-    previousCell = tile;
-    selectTile(Number(tile.dataset.index), true);
-  }
-
-  function stopTracing(event) {
-    if (event.pointerId !== activePointer) return;
-    activePointer = null;
-    previousCell = null;
-  }
-
-  drag.addEventListener('click', () => {
-    const enabled = bank.classList.toggle('drag-enabled');
-    drag.setAttribute('aria-pressed', String(enabled));
-    document.querySelector('#trail-instructions').textContent = enabled
-      ? 'Drag across neighbouring letters to trace a word. You can still use Tab and Enter.'
-      : 'Tap a letter to start, then choose a neighbour. You can also use Tab and Enter.';
-  });
-  bank.addEventListener('pointerdown', event => {
-    if (!bank.classList.contains('drag-enabled') || !event.isPrimary || event.button !== 0) return;
-    activePointer = event.pointerId;
-    bank.setPointerCapture(activePointer);
-    tracePointer(event);
-  });
-  bank.addEventListener('pointermove', event => {
-    if (event.pointerId === activePointer) tracePointer(event);
-  });
-  bank.addEventListener('lostpointercapture', stopTracing);
-
-  function renderLevel() {
-    levels.forEach((button, index) => {
-      const selected = index === progress.level;
-      button.classList.toggle('is-active', selected);
-      button.setAttribute('aria-pressed', String(selected));
+      b.addEventListener("click", (e) => {
+        if (e.detail === 0 || touchTap) visit(n);
+        touchTap = false;
+      });
+      byId("letters").append(b);
     });
-    renderPuzzle();
+    byId("word-list").replaceChildren();
+    p.words.forEach((w, j) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.style.setProperty("--trail-tint", tints[j]);
+      b.onclick = () => chooseWord(j);
+      byId("word-list").append(b);
+    });
+    document
+      .querySelectorAll("[data-difficulty]")
+      .forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+    const saved = restore
+      ? savedPuzzles[`${difficulty}:${rounds[difficulty]}`]
+      : null;
+    if (saved) {
+      selected = saved.selected;
+      trail = [...saved.trail];
+      completed = new Map(saved.completed);
+      revealed = new Map(saved.revealed);
+      history = [...saved.history];
+      timerElapsed = saved.elapsed;
+      if (saved.running) timerStartedAt = performance.now();
+    }
+    byId("word-message").textContent =
+      "Start on any letter and try a combination. Select a word if you would like a hint.";
+    drawTimer();
+    draw();
   }
-
-  function newPuzzle() {
-    const { remaining, unused } = allowance();
-    if (!remaining || !unused.length) {
-      updateAllowance();
-      status.textContent = availabilityMessage();
-      return;
-    }
-    const [word] = unused[Math.floor(Math.random() * unused.length)];
-    const tiles = [...word];
-    for (let index = tiles.length - 1; index > 0; index--) {
-      const other = Math.floor(Math.random() * (index + 1));
-      [tiles[index], tiles[other]] = [tiles[other], tiles[index]];
-    }
-    progress.puzzles[word] = { level: progress.level, day: localDay(), tiles, typed: [], completed: false };
-    progress.active[progress.level] = word;
-    saveProgress();
-    renderPuzzle();
-    bank.firstElementChild?.focus();
-  }
-
-  function clearAnswer() {
-    const word = activeWord();
-    const puzzle = progress.puzzles[word];
-    if (!puzzle) return;
-    puzzle.typed = [];
-    delete puzzle.began;
-    delete puzzle.finishedAt;
-    saveProgress();
-    renderPuzzle();
-  }
-
-  levels.forEach((button, index) => button.addEventListener('click', () => {
-    progress.level = index;
-    saveProgress();
-    renderLevel();
-  }));
-
-  history.addEventListener('change', () => {
-    const word = history.value;
-    progress.active[progress.level] = word;
-    if (progress.puzzles[word].completed) clearAnswer();
-    else {
-      saveProgress();
-      renderPuzzle();
+  byId("trail-board").addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const b = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest("[data-cell]");
+    if (b && byId("letters").contains(b)) {
+      const cell = Number(b.dataset.cell);
+      if (cell !== lastPointerCell) {
+        lastPointerCell = cell;
+        visit(cell, "drag");
+      }
     }
   });
-
-  undo.addEventListener('click', () => {
-    const word = activeWord();
-    const puzzle = progress.puzzles[word];
-    if (!puzzle?.typed.length) return;
-    puzzle.typed.pop();
-    delete puzzle.finishedAt;
-    hinted = undefined;
-    saveProgress();
-    renderAnswer(word, puzzle);
-    status.textContent = 'You can do it!';
-    if (undo.disabled) bank.firstElementChild?.focus();
+  document.addEventListener("pointerup", () => (dragging = false));
+  document.addEventListener("pointercancel", () => (dragging = false));
+  document
+    .querySelectorAll("[data-difficulty]")
+    .forEach(
+      (b) => (b.onclick = () => loadPuzzle(Number(b.dataset.difficulty))),
+    );
+  byId("word-undo").onclick = undo;
+  byId("word-hint").onclick = hint;
+  byId("word-clear").onclick = () => chooseWord(selected);
+  byId("word-restart").onclick = () => loadPuzzle(difficulty, false);
+  byId("word-next").onclick = () => loadPuzzle(difficulty + 1);
+  byId("word-new").onclick = () => {
+    const previousDay = dailyKey;
+    refreshDaily();
+    if (previousDay === dailyKey)
+      rounds[difficulty] = (rounds[difficulty] + 1) % 5;
+    loadPuzzle(difficulty);
+  };
+  loadPuzzle(savedDifficulty);
+  window.addEventListener("pagehide", savePuzzle);
+  window.addEventListener("focus", () => {
+    if (refreshDaily()) loadPuzzle(difficulty);
   });
 
-  hint.addEventListener('click', () => {
-    const word = activeWord();
-    const puzzle = progress.puzzles[word];
-    if (!puzzle) return;
-    hinted = nextHint(word, puzzle.typed);
-    renderAnswer(word, puzzle);
-    if (hinted === undefined) {
-      status.textContent = 'Try undoing a letter or clearing the path, then ask for another hint.';
-      return;
-    }
-    bank.querySelector('.is-hinted')?.focus();
-    const cell = board.positions[hinted];
-    status.textContent = `Try ${board.letters[hinted]} at row ${Math.floor(cell / size) + 1}, column ${cell % size + 1}.`;
-  });
-  restart.addEventListener('click', () => {
-    clearAnswer();
-    bank.firstElementChild?.focus();
-  });
-  next.addEventListener('click', () => {
-    const word = activeWord();
-    if (word && isSolved(word, progress.puzzles[word])) newPuzzle();
-  });
-  start.addEventListener('click', newPuzzle);
-  window.addEventListener('focus', refreshDay);
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshDay();
-  });
-  window.addEventListener('storage', event => {
-    if (!sessionOnly && event.key === storageKey) {
-      progress = readProgress();
-      renderLevel();
-    }
-  });
-
-  // Detect disabled storage before the first challenge is issued.
-  saveProgress();
-  renderLevel();
-  scheduleMidnight();
-  setInterval(updateTimer, 250);
+  byId("word-touch-mode").onclick = () => {
+    touchDrag = !touchDrag;
+    dragging = false;
+    byId("trail-board").classList.toggle("touch-drag", touchDrag);
+    byId("word-touch-mode").setAttribute("aria-pressed", String(touchDrag));
+    byId("word-touch-mode").textContent =
+      `Drag mode: ${touchDrag ? "on" : "off"}`;
+  };
+  byId("word-zoom").onclick = () => {
+    const enlarged = byId("trail-scroll").classList.toggle("enlarged");
+    byId("word-zoom").setAttribute("aria-pressed", String(enlarged));
+    byId("word-zoom").textContent = enlarged ? "Fit screen" : "Larger letters";
+  };
 })();
