@@ -85,6 +85,12 @@ try {
   await call('Network.enable');
   await call('Network.setCacheDisabled', { cacheDisabled: true });
 
+  await go('/');
+  assert.deepEqual(await run(() => [...document.querySelectorAll('#games .game-card')].map(link => link.pathname)),
+    ['/words/', '/maths/', '/memory/', '/robot/']);
+  assert.deepEqual(await run(() => [...document.querySelectorAll('[aria-label="Footer games"] a')].map(link => link.pathname)),
+    ['/words/', '/maths/', '/memory/', '/robot/']);
+
   // Preserve the Phase 1 form privacy fallback.
   for (const mode of ['normal', 'blocked', 'disabled']) {
     await call('Network.setBlockedURLs', { urls: mode === 'blocked' ? ['*/assets/parents.js'] : [] });
@@ -147,21 +153,73 @@ try {
   assert.deepEqual(refreshed.puzzles[partial.active[0]], partial.puzzles[partial.active[0]]);
   assert.equal(await run(() => document.querySelector('#letter-bank').textContent), originalTiles);
 
-  function solveWord() {
+  function wordPath() {
     const { level, active } = JSON.parse(localStorage.getItem('moonberry.word-trails.v1'));
-    document.querySelector('#restart').click();
-    for (const letter of active[level]) {
-      [...document.querySelectorAll('.letter-tile:not(:disabled)')].find(tile => tile.textContent === letter).click();
+    const word = active[level];
+    const cells = [...document.querySelectorAll('.letter-tile')];
+    function find(path) {
+      if (path.length === word.length) return path;
+      const last = path.at(-1);
+      for (const [cell, button] of cells.entries()) {
+        if (button.textContent !== word[path.length] || path.includes(cell)) continue;
+        if (path.length && Math.abs(Math.floor(last / 4) - Math.floor(cell / 4)) + Math.abs(last % 4 - cell % 4) !== 1) continue;
+        const result = find([...path, cell]);
+        if (result) return result;
+      }
     }
-    return active[level];
+    const path = find([]);
+    if (!path) throw Error('Word has no connected path: ' + word);
+    return { word, path };
   }
-  const firstWord = await run(solveWord);
+
+  await run(() => document.querySelector('#restart').click());
+  await run(() => document.querySelector('#hint').click());
+  assert.equal(await run(() => document.querySelectorAll('.letter-tile.is-hinted').length), 1);
+  const { path: firstPath } = await run(wordPath);
+  const dragPositions = await run(path => {
+    document.querySelector('#drag-mode').click();
+    const cells = [...document.querySelectorAll('.letter-tile')];
+    document.querySelector('#letter-bank').scrollIntoView({ block: 'center', behavior: 'instant' });
+    return path.slice(0, 2).map(cell => {
+      const { x, y, width, height } = cells[cell].getBoundingClientRect();
+      return { x: x + width / 2, y: y + height / 2 };
+    });
+  }, firstPath);
+  await call('Input.dispatchMouseEvent', { type: 'mousePressed', ...dragPositions[0], button: 'left', clickCount: 1 });
+  await call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...dragPositions[1], buttons: 1 });
+  await call('Input.dispatchMouseEvent', { type: 'mouseReleased', ...dragPositions[1], button: 'left', clickCount: 1 });
+  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 2);
+  await run(() => document.querySelector('#drag-mode').click());
+  await run(() => {
+    document.querySelector('#restart').click();
+    const cells = document.querySelectorAll('.letter-tile');
+    cells[0].click();
+    cells[15].click();
+  });
+  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 1);
+  assert.match(await run(() => document.querySelector('#game-status').textContent), /directly above/);
+  await run(() => {
+    document.querySelector('#restart').click();
+    document.querySelector('.letter-tile').focus();
+  });
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+  await call('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+  assert.equal(await run(() => document.querySelectorAll('.letter-tile[aria-pressed="true"]').length), 1);
+
+  async function solveWord() {
+    const { word, path } = await run(wordPath);
+    await run(path => {
+      document.querySelector('#restart').click();
+      const cells = document.querySelectorAll('.letter-tile');
+      for (const cell of path) cells[cell].click();
+    }, path);
+    return word;
+  }
+  const firstWord = await solveWord();
   assert.equal(await run(() => document.querySelector('#next').disabled), false);
   await run(() => document.querySelector('#undo').click());
   assert.equal(await run(() => document.querySelector('#next').disabled), true);
-  await run(last => {
-    [...document.querySelectorAll('.letter-tile:not(:disabled)')].find(tile => tile.textContent === last).click();
-  }, firstWord.at(-1));
+  await run(cell => document.querySelectorAll('.letter-tile')[cell].click(), firstPath.at(-1));
   assert.equal(await run(() => document.querySelector('#next').disabled), false);
 
   for (let level = 0; level < 4; level++) {
@@ -170,7 +228,7 @@ try {
       document.querySelector('#new-word').click();
     }, level);
     for (let word = 0; word < 5; word++) {
-      const spelling = await run(solveWord);
+      const spelling = await solveWord();
       assert.ok(spelling.length >= ranges[level][0] && spelling.length <= ranges[level][1]);
       await run(() => document.querySelector('#next').click());
     }
@@ -186,7 +244,7 @@ try {
     history.dispatchEvent(new Event('change'));
   });
   assert.equal(await run(() => document.querySelector('#next').disabled), true);
-  assert.equal(await run(solveWord), firstWord);
+  assert.equal(await solveWord(), firstWord);
   assert.equal(Object.keys((await run(wordState)).puzzles).length, 20);
 
   await run(() => window.beginMidnight());
@@ -205,7 +263,7 @@ try {
     localStorage.setItem(key, JSON.stringify(state));
   });
   await go('/words/');
-  await run(solveWord);
+  await solveWord();
   assert.match(await run(() => document.querySelector('#game-status').textContent), /explored every word/);
 
   await call('Page.removeScriptToEvaluateOnNewDocument', clock);
@@ -341,6 +399,9 @@ try {
     assert.equal(await run(() => document.querySelector('#mission-timer').textContent), '0:00');
   }
 
+  await go('/words/');
+  assert.ok(await run(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await run(() => getComputedStyle(document.querySelector('.trails-layout')).gridTemplateColumns.split(' ').length), 1);
   await go('/memory/');
   const order = () => [...document.querySelectorAll('.memory-card')].map(card => card.dataset.symbol).join('|');
   const firstOrder = await run(order);
